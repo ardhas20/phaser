@@ -18,6 +18,9 @@ export class Game extends Phaser.Scene {
 }
 
     update(time) {
+
+          
+
        
     }
 
