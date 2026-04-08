@@ -8,10 +8,9 @@ export class Game extends Phaser.Scene {
     create() {
         this.gameOver = false;
 
-        // 🌍 BIG WORLD
+        // 🌍 WORLD
         this.physics.world.setBounds(0, 0, 2000, 600);
 
-        // 🌄 BACKGROUND (doesn't move)
         this.add.tileSprite(0, 0, 2000, 600, 'sky')
             .setOrigin(0, 0)
             .setScrollFactor(0);
@@ -19,77 +18,79 @@ export class Game extends Phaser.Scene {
         // 🧱 PLATFORMS
         this.platforms = this.physics.add.staticGroup();
 
-        // ground (full level)
         for (let x = 0; x < 2000; x += 400) {
             this.platforms.create(x, 568, 'ground')
                 .setScale(2)
                 .refreshBody();
         }
 
-        // floating platforms (Mario style)
         this.platforms.create(400, 400, 'ground');
         this.platforms.create(800, 300, 'ground');
         this.platforms.create(1200, 350, 'ground');
         this.platforms.create(1600, 250, 'ground');
 
-        // 👤 PLAYER
+        // 👤 PLAYER = TEACHER
         this.player = new Player(this, 100, 450);
         this.physics.add.collider(this.player, this.platforms);
 
-        // 🎥 CAMERA FOLLOW (Mario style)
+        // 🎥 CAMERA
         this.cameras.main.setBounds(0, 0, 2000, 600);
         this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
-        this.cameras.main.setDeadzone(100, 50);
 
         // 🎮 INPUT
         this.cursors = this.input.keyboard.createCursorKeys();
-        this.enterKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
 
-        // ⭐ STARS
-        this.stars = this.physics.add.group();
-        this.physics.add.collider(this.stars, this.platforms);
-        this.physics.add.overlap(this.player, this.stars, this.collectStar, null, this);
+        // ❤️ LIVES
+        this.lives = 3;
 
-        // 💣 BOMBS
-        this.bombs = this.physics.add.group();
-        this.physics.add.collider(this.bombs, this.platforms);
-        this.physics.add.collider(this.player, this.bombs, this.hitBomb, null, this);
+        // 📚 HOMEWORK
+        this.homework = 0;
+        this.requiredHomework = 10;
 
-        // 🏁 GOAL (END)
-        this.goal = this.physics.add.staticImage(1900, 500, 'star')
-            .setScale(1.5)
-            .refreshBody();
+        // ⏰ TIME
+        this.timeLeft = 60;
 
+        // 🧾 UI
+        this.uiText = this.add.text(16, 16,
+            `Homework: 0/${this.requiredHomework} | Lives: 3 | Time: 60`,
+            { fontSize: '20px', fill: '#000' }
+        ).setScrollFactor(0);
+
+        // ⭐ GOOD STUDENTS
+        this.goodStudents = this.physics.add.group();
+        this.physics.add.collider(this.goodStudents, this.platforms);
+        this.physics.add.overlap(this.player, this.goodStudents, this.collectHomework, null, this);
+
+        // 😈 BAD STUDENTS
+        this.badStudents = this.physics.add.group();
+        this.physics.add.collider(this.badStudents, this.platforms);
+        this.physics.add.collider(this.player, this.badStudents, this.hitBadStudent, null, this);
+
+        // 🏁 HEADMASTER
+        this.goal = this.physics.add.staticImage(1900, 500, 'star');
         this.physics.add.overlap(this.player, this.goal, this.reachGoal, null, this);
 
-        // 🧾 SCORE UI (fixed to camera)
-        this.score = 0;
-        this.scoreText = this.add.text(16, 16, 'Score: 0', {
-            fontSize: '28px',
-            fill: '#000'
-        }).setScrollFactor(0);
+        // SPAWN LOOPS
+        this.time.addEvent({ delay: 2000, callback: this.spawnGoodStudent, callbackScope: this, loop: true });
+        this.time.addEvent({ delay: 3000, callback: this.spawnBadStudent, callbackScope: this, loop: true });
 
-        // ⭐ STAR SPAWN LOOP
-        this.spawnDelay = 2500;
-        this.spawnEvent = this.time.addEvent({
-            delay: this.spawnDelay,
-            callback: this.spawnStar,
-            callbackScope: this,
+        // ⏰ TIMER LOOP
+        this.time.addEvent({
+            delay: 1000,
+            callback: () => {
+                this.timeLeft--;
+                this.updateUI();
+
+                if (this.timeLeft <= 0) {
+                    this.endGame(false);
+                }
+            },
             loop: true
         });
-
-        this.bombSpawningEnabled = true;
-
-        this.scheduleStarRush();
     }
 
     update() {
-        if (this.gameOver) {
-            if (Phaser.Input.Keyboard.JustDown(this.enterKey)) {
-                this.scene.restart();
-            }
-            return;
-        }
+        if (this.gameOver) return;
 
         const speed = 200;
 
@@ -120,133 +121,75 @@ export class Game extends Phaser.Scene {
         }
     }
 
-    // ⭐ STAR SPAWN (POP EFFECT)
-    spawnStar() {
-        if (this.stars.countActive(true) > 5) return;
+    // ⭐ GOOD STUDENT (gives homework)
+    spawnGoodStudent() {
+        const x = Phaser.Math.Between(100, 1900);
+        const student = this.goodStudents.create(x, 0, 'star');
 
-        const x = Phaser.Math.Between(50, 1950);
-        const y = Phaser.Math.Between(50, 500);
-
-        const star = this.stars.create(x, y, 'star');
-
-        star.setScale(0);
-        star.setBounce(0.4);
-        star.setCollideWorldBounds(true);
-
-        this.tweens.add({
-            targets: star,
-            scale: 1,
-            duration: 300,
-            ease: 'Back.Out'
-        });
+        student.setBounce(0.3);
+        student.setCollideWorldBounds(true);
     }
 
-    collectStar(player, star) {
-        star.destroy();
+    collectHomework(player, student) {
+        student.destroy();
+        this.homework++;
 
-        this.score += 1;
-        this.scoreText.setText('Score: ' + this.score);
+        this.updateUI();
+    }
 
-        if (this.bombSpawningEnabled) {
-            this.spawnBomb();
+    // 😈 BAD STUDENT (damage)
+    spawnBadStudent() {
+        const x = Phaser.Math.Between(100, 1900);
+        const bad = this.badStudents.create(x, 0, 'bomb');
+
+        bad.setBounce(1);
+        bad.setVelocity(Phaser.Math.Between(-100, 100), 50);
+        bad.setCollideWorldBounds(true);
+    }
+
+    hitBadStudent(player, bad) {
+        bad.destroy();
+
+        this.lives--;
+
+        this.player.setTint(0xff0000);
+        this.time.delayedCall(200, () => this.player.clearTint());
+
+        this.updateUI();
+
+        if (this.lives <= 0) {
+            this.endGame(false);
         }
     }
 
-    spawnBomb() {
-        if (this.bombs.countActive(true) > 5) return;
-
-        const x = Phaser.Math.Between(50, 1950);
-        const bomb = this.bombs.create(x, 0, 'bomb');
-
-        bomb.setBounce(1);
-        bomb.setVelocity(
-            Phaser.Math.Between(-150, 150),
-            Phaser.Math.Between(50, 120)
+    // 🧾 UI UPDATE
+    updateUI() {
+        this.uiText.setText(
+            `Homework: ${this.homework}/${this.requiredHomework} | Lives: ${this.lives} | Time: ${this.timeLeft}`
         );
-        bomb.setCollideWorldBounds(true);
-
-        this.fadeAndDestroy(bomb, 5000);
     }
 
-    fadeAndDestroy(obj, delay) {
-        this.time.delayedCall(delay - 1000, () => {
-            this.tweens.add({
-                targets: obj,
-                alpha: 0,
-                duration: 1000,
-                onComplete: () => obj.destroy()
-            });
-        });
+    // 🏁 FINISH
+    reachGoal() {
+        if (this.homework >= this.requiredHomework) {
+            this.endGame(true);
+        } else {
+            this.endGame(false);
+        }
     }
 
-    // ⭐ STAR RUSH EVENT
-    scheduleStarRush() {
-        const delay = Phaser.Math.Between(15000, 25000);
-
-        this.time.delayedCall(delay, () => {
-            this.startStarRush();
-            this.scheduleStarRush();
-        });
-    }
-
-    startStarRush() {
-        this.bombSpawningEnabled = false;
-
-        const text = this.add.text(400, 300, 'STAR RUSH', {
-            fontSize: '48px',
-            fill: '#ffff00'
-        }).setOrigin(0.5).setScrollFactor(0);
-
-        this.time.addEvent({
-            delay: 200,
-            callback: () => {
-                const x = Phaser.Math.Between(50, 1950);
-                const y = Phaser.Math.Between(50, 300);
-
-                const star = this.stars.create(x, y, 'star');
-                star.setScale(0);
-
-                this.tweens.add({
-                    targets: star,
-                    scale: 1,
-                    duration: 200
-                });
-            },
-            repeat: 25
-        });
-
-        this.time.delayedCall(5000, () => {
-            text.destroy();
-            this.stars.clear(true, true);
-            this.bombSpawningEnabled = true;
-        });
-    }
-
-    // 💀 GAME OVER
-    hitBomb(player, bomb) {
+    // 🎬 END GAME
+    endGame(win) {
         this.gameOver = true;
-
         this.physics.pause();
 
-        player.setTint(0xff0000);
-        player.anims.play('turn');
+        let text = win
+            ? 'YOU WIN 🎉\nHomework delivered!'
+            : 'YOU LOST ❌';
 
-        this.add.text(400, 300, 'GAME OVER\nPRESS ENTER', {
+        this.add.text(400, 300, text, {
             fontSize: '32px',
             fill: '#fff',
-            align: 'center'
-        }).setOrigin(0.5).setScrollFactor(0);
-    }
-
-    // 🏁 WIN
-    reachGoal(player, goal) {
-        this.gameOver = true;
-
-        this.physics.pause();
-
-        this.add.text(400, 300, 'YOU WIN 🎉\nPRESS ENTER', {
-            fontSize: '32px',
-            fill: '#0f0',
             align: 'center'
         }).setOrigin(0.5).setScrollFactor(0);
     }
