@@ -8,7 +8,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         this.setBounce(0.2);
         this.setCollideWorldBounds(true);
 
-        this.initAnimations(); // IMPORTANT
+        this.initAnimations();
     }
 
     initAnimations() {
@@ -31,21 +31,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
             frameRate: 10,
             repeat: -1
         });
-    }
-
-    moveLeft() {
-        this.setVelocityX(-200);
-        this.anims.play('left', true);
-    }
-
-    moveRight() {
-        this.setVelocityX(200);
-        this.anims.play('right', true);
-    }
-
-    idle() {
-        this.setVelocityX(0);
-        this.anims.play('turn');
     }
 
     jump() {

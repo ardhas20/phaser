@@ -7,44 +7,70 @@ export class Game extends Phaser.Scene {
 
     create() {
         this.gameOver = false;
-        this.level50Triggered = false;
 
-        this.add.image(400, 300, 'sky');
+        // 🌍 BIG WORLD
+        this.physics.world.setBounds(0, 0, 2000, 600);
 
+        // 🌄 BACKGROUND (doesn't move)
+        this.add.tileSprite(0, 0, 2000, 600, 'sky')
+            .setOrigin(0, 0)
+            .setScrollFactor(0);
+
+        // 🧱 PLATFORMS
         this.platforms = this.physics.add.staticGroup();
 
-        this.platforms.create(400, 568, 'ground').setScale(2).refreshBody();
-        this.platforms.create(600, 400, 'ground');
-        this.platforms.create(50, 250, 'ground');
-        this.platforms.create(750, 220, 'ground');
+        // ground (full level)
+        for (let x = 0; x < 2000; x += 400) {
+            this.platforms.create(x, 568, 'ground')
+                .setScale(2)
+                .refreshBody();
+        }
 
+        // floating platforms (Mario style)
+        this.platforms.create(400, 400, 'ground');
+        this.platforms.create(800, 300, 'ground');
+        this.platforms.create(1200, 350, 'ground');
+        this.platforms.create(1600, 250, 'ground');
+
+        // 👤 PLAYER
         this.player = new Player(this, 100, 450);
         this.physics.add.collider(this.player, this.platforms);
 
+        // 🎥 CAMERA FOLLOW (Mario style)
+        this.cameras.main.setBounds(0, 0, 2000, 600);
+        this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
+        this.cameras.main.setDeadzone(100, 50);
+
+        // 🎮 INPUT
         this.cursors = this.input.keyboard.createCursorKeys();
         this.enterKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
 
-        // ⭐
+        // ⭐ STARS
         this.stars = this.physics.add.group();
         this.physics.add.collider(this.stars, this.platforms);
+        this.physics.add.overlap(this.player, this.stars, this.collectStar, null, this);
 
-        // 💣
+        // 💣 BOMBS
         this.bombs = this.physics.add.group();
         this.physics.add.collider(this.bombs, this.platforms);
-
-        this.physics.add.overlap(this.player, this.stars, this.collectStar, null, this);
         this.physics.add.collider(this.player, this.bombs, this.hitBomb, null, this);
 
-        // SCORE
+        // 🏁 GOAL (END)
+        this.goal = this.physics.add.staticImage(1900, 500, 'star')
+            .setScale(1.5)
+            .refreshBody();
+
+        this.physics.add.overlap(this.player, this.goal, this.reachGoal, null, this);
+
+        // 🧾 SCORE UI (fixed to camera)
         this.score = 0;
         this.scoreText = this.add.text(16, 16, 'Score: 0', {
             fontSize: '28px',
             fill: '#000'
-        });
+        }).setScrollFactor(0);
 
-        // SPAWN CONTROL
+        // ⭐ STAR SPAWN LOOP
         this.spawnDelay = 2500;
-
         this.spawnEvent = this.time.addEvent({
             delay: this.spawnDelay,
             callback: this.spawnStar,
@@ -52,14 +78,12 @@ export class Game extends Phaser.Scene {
             loop: true
         });
 
-        // 🚨 RED WARNING ZONE (hidden)
-        this.warningZone = this.add.rectangle(600, 300, 400, 600, 0xff0000)
-            .setAlpha(0)
-            .setDepth(10);
+        this.bombSpawningEnabled = true;
+
+        this.scheduleStarRush();
     }
 
     update() {
-        // ⏎ restart
         if (this.gameOver) {
             if (Phaser.Input.Keyboard.JustDown(this.enterKey)) {
                 this.scene.restart();
@@ -67,14 +91,28 @@ export class Game extends Phaser.Scene {
             return;
         }
 
-        if (this.cursors.left.isDown) {
-            this.player.moveLeft();
+        const speed = 200;
+
+        if (this.cursors.left.isDown && !this.cursors.right.isDown) {
+            this.player.setVelocityX(
+                Phaser.Math.Linear(this.player.body.velocity.x, -speed, 0.2)
+            );
+            this.player.anims.play('left', true);
         }
-        else if (this.cursors.right.isDown) {
-            this.player.moveRight();
+        else if (this.cursors.right.isDown && !this.cursors.left.isDown) {
+            this.player.setVelocityX(
+                Phaser.Math.Linear(this.player.body.velocity.x, speed, 0.2)
+            );
+            this.player.anims.play('right', true);
         }
         else {
-            this.player.idle();
+            this.player.setVelocityX(
+                Phaser.Math.Linear(this.player.body.velocity.x, 0, 0.2)
+            );
+
+            if (Math.abs(this.player.body.velocity.x) < 5) {
+                this.player.anims.play('turn');
+            }
         }
 
         if (this.cursors.up.isDown) {
@@ -82,116 +120,109 @@ export class Game extends Phaser.Scene {
         }
     }
 
-    // ⭐ SPAWN
+    // ⭐ STAR SPAWN (POP EFFECT)
     spawnStar() {
-        if (this.stars.countActive(true) > 3) return;
+        if (this.stars.countActive(true) > 5) return;
 
-        const x = Phaser.Math.Between(50, 750);
-        const star = this.stars.create(x, 0, 'star');
+        const x = Phaser.Math.Between(50, 1950);
+        const y = Phaser.Math.Between(50, 500);
 
-        star.setBounce(0.6);
+        const star = this.stars.create(x, y, 'star');
+
+        star.setScale(0);
+        star.setBounce(0.4);
         star.setCollideWorldBounds(true);
+
+        this.tweens.add({
+            targets: star,
+            scale: 1,
+            duration: 300,
+            ease: 'Back.Out'
+        });
     }
 
-    // ⭐ COLLECT
     collectStar(player, star) {
         star.destroy();
 
         this.score += 1;
         this.scoreText.setText('Score: ' + this.score);
 
-        // LEVEL 50 EVENT
-        if (this.score >= 50 && !this.level50Triggered) {
-            this.level50Triggered = true;
-            this.triggerBombRain();
-        }
-
-        if (this.score % 5 === 0) {
-            this.increaseDifficulty();
-        }
-
-        this.spawnBomb();
-    }
-
-    // 📈 DIFFICULTY
-    increaseDifficulty() {
-        if (this.spawnDelay > 1000) {
-            this.spawnDelay -= 300;
-
-            this.spawnEvent.remove(false);
-
-            this.spawnEvent = this.time.addEvent({
-                delay: this.spawnDelay,
-                callback: this.spawnStar,
-                callbackScope: this,
-                loop: true
-            });
+        if (this.bombSpawningEnabled) {
+            this.spawnBomb();
         }
     }
 
-    // 💣 NORMAL BOMB
     spawnBomb() {
-        const x = Phaser.Math.Between(50, 750);
-        const type = Phaser.Math.Between(0, 1);
+        if (this.bombs.countActive(true) > 5) return;
 
+        const x = Phaser.Math.Between(50, 1950);
         const bomb = this.bombs.create(x, 0, 'bomb');
+
+        bomb.setBounce(1);
+        bomb.setVelocity(
+            Phaser.Math.Between(-150, 150),
+            Phaser.Math.Between(50, 120)
+        );
         bomb.setCollideWorldBounds(true);
 
-        if (type === 0) {
-            bomb.setBounce(1);
-            bomb.setVelocity(
-                Phaser.Math.Between(-200, 200),
-                Phaser.Math.Between(50, 150)
-            );
-        } else {
-            bomb.setBounce(0.2);
-            bomb.setVelocity(0, 100);
-        }
-
-        // 💣 AUTO DELETE AFTER 5s
-        this.time.delayedCall(5000, () => {
-            if (bomb.active) bomb.destroy();
-        });
+        this.fadeAndDestroy(bomb, 5000);
     }
 
-    // 🚨 LEVEL 50 EVENT
-    triggerBombRain() {
-        // flash warning
-        this.tweens.add({
-            targets: this.warningZone,
-            alpha: 0.5,
-            duration: 200,
-            yoyo: true,
-            repeat: 5
-        });
-
-        // after 2 sec → bomb rain
-        this.time.delayedCall(2000, () => {
-
-            const rainEvent = this.time.addEvent({
-                delay: 200,
-                callback: () => {
-
-                    const x = Phaser.Math.Between(400, 800); // right side zone
-
-                    const bomb = this.bombs.create(x, 0, 'bomb');
-                    bomb.setBounce(0.5);
-                    bomb.setVelocity(0, 200);
-                    bomb.setCollideWorldBounds(true);
-
-                    // auto delete
-                    this.time.delayedCall(4000, () => {
-                        if (bomb.active) bomb.destroy();
-                    });
-
-                },
-                repeat: 15 // ~3 seconds
+    fadeAndDestroy(obj, delay) {
+        this.time.delayedCall(delay - 1000, () => {
+            this.tweens.add({
+                targets: obj,
+                alpha: 0,
+                duration: 1000,
+                onComplete: () => obj.destroy()
             });
-
         });
     }
 
-    // 💣 GAME OVER
+    // ⭐ STAR RUSH EVENT
+    scheduleStarRush() {
+        const delay = Phaser.Math.Between(15000, 25000);
+
+        this.time.delayedCall(delay, () => {
+            this.startStarRush();
+            this.scheduleStarRush();
+        });
+    }
+
+    startStarRush() {
+        this.bombSpawningEnabled = false;
+
+        const text = this.add.text(400, 300, 'STAR RUSH', {
+            fontSize: '48px',
+            fill: '#ffff00'
+        }).setOrigin(0.5).setScrollFactor(0);
+
+        this.time.addEvent({
+            delay: 200,
+            callback: () => {
+                const x = Phaser.Math.Between(50, 1950);
+                const y = Phaser.Math.Between(50, 300);
+
+                const star = this.stars.create(x, y, 'star');
+                star.setScale(0);
+
+                this.tweens.add({
+                    targets: star,
+                    scale: 1,
+                    duration: 200
+                });
+            },
+            repeat: 25
+        });
+
+        this.time.delayedCall(5000, () => {
+            text.destroy();
+            this.stars.clear(true, true);
+            this.bombSpawningEnabled = true;
+        });
+    }
+
+    // 💀 GAME OVER
     hitBomb(player, bomb) {
         this.gameOver = true;
 
@@ -200,9 +231,23 @@ export class Game extends Phaser.Scene {
         player.setTint(0xff0000);
         player.anims.play('turn');
 
-        this.add.text(400, 300, 'PRESS ENTER TO RESTART', {
+        this.add.text(400, 300, 'GAME OVER\nPRESS ENTER', {
             fontSize: '32px',
-            fill: '#fff'
-        }).setOrigin(0.5);
+            fill: '#fff',
+            align: 'center'
+        }).setOrigin(0.5).setScrollFactor(0);
+    }
+
+    // 🏁 WIN
+    reachGoal(player, goal) {
+        this.gameOver = true;
+
+        this.physics.pause();
+
+        this.add.text(400, 300, 'YOU WIN 🎉\nPRESS ENTER', {
+            fontSize: '32px',
+            fill: '#0f0',
+            align: 'center'
+        }).setOrigin(0.5).setScrollFactor(0);
     }
 }
