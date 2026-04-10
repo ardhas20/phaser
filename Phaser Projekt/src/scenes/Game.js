@@ -8,6 +8,7 @@ export class Game extends Phaser.Scene {
 
     create() {
         this.gameOver = false;
+        this.hazardTimer = null;
 
         // 🌍 WORLD
         this.physics.world.setBounds(0, 0, 3000, 600);
@@ -84,7 +85,17 @@ this.guard = new Guard(this, 900, 500, 'marilda');
 
         this.startPhase1();
         this.updateUI();
+// 🧑 KARL (WIN TRIGGER)
+this.karl = this.physics.add.sprite(2700, 500, 'karl');
+this.karl.setImmovable(true);
+this.karl.setVisible(false); // hidden until final phase
 
+this.physics.add.overlap(this.player, this.karl, () => {
+    if (this.phase === 2) return; // only allow win AFTER phase 2 is done
+
+    this.showMessage("Karl: Congratulations Paul, you gathered all the homework. I'm giving you a raise!");
+    this.endGame(true);
+});
         // 💣 BOMB SYSTEM
 this.bombs = this.physics.add.group();
 
@@ -192,8 +203,7 @@ if (Phaser.Input.Keyboard.JustDown(this.bKey)) {
     } else {
         this.showMessage("NOT ENOUGH HOMEWORK");
     }
-
-    }
+}
 
     nextPhase() {
     this.phase++;
@@ -202,23 +212,28 @@ if (Phaser.Input.Keyboard.JustDown(this.bKey)) {
     if (this.phase === 2) {
         this.requiredHomework = 10;
 
-        this.guard.setTexture('sidita');   // ✅ PHASE 2 GUARD
+        this.guard.setTexture('sidita');
         this.guard.setPosition(1850, 500);
 
         this.startPhase2();
+
+        // ❗ start hazards ONLY here
+        this.spawnFallingHazards();
+
         this.showMessage("PART 2");
     }
     else if (this.phase === 3) {
-        this.requiredHomework = 20;
+        // 🏁 FINAL STATE → enable Karl
+        this.karl.setVisible(true);
+        this.karl.setPosition(2700, 500);
 
-        this.guard.setTexture('karl');     // ✅ PHASE 3 GUARD
-        this.guard.setPosition(2700, 500);
+        // stop hazards completely
+        if (this.hazardTimer) {
+            this.hazardTimer.remove();
+            this.hazardTimer = null;
+        }
 
-        this.startBoss();
-        this.showMessage("BOSS FIGHT");
-    }
-    else {
-        this.endGame(true);
+        this.showMessage("Go talk to Karl");
     }
 
     this.updateUI();
@@ -266,10 +281,6 @@ if (Phaser.Input.Keyboard.JustDown(this.bKey)) {
     this.spawnFallingHazards();
 }
 
-
-    startBoss() {
-        this.showMessage("BOSS FIGHT");
-    }
 
     // =========================
     // UI / END
@@ -322,24 +333,27 @@ if (Phaser.Input.Keyboard.JustDown(this.bKey)) {
 spawnFallingHazards() {
     const textures = ['laptop', 'pultteiler', 'bag'];
 
-    this.time.addEvent({
-        delay: 1200, // ⬅️ slower spawn (not too many)
+    this.hazardTimer = this.time.addEvent({
+        delay: 1800, // slower spawn
         loop: true,
         callback: () => {
-            // 📍 SIDITA AREA ONLY
-            const x = Phaser.Math.Between(1700, 2000);
+
+            // ❌ only run in phase 2
+            if (this.phase !== 2) return;
+
+            // 📍 ONLY SIDITA AREA
+            const x = Phaser.Math.Between(1750, 1950);
 
             const texture = Phaser.Utils.Array.GetRandom(textures);
 
             const obj = this.fallingHazards.create(x, 0, texture);
 
-            obj.setScale(1); // bigger
+            obj.setScale(1.2); // bigger
+            obj.setAngularVelocity(150); // spin
 
-            obj.setVelocityY(80); // slower fall
+            obj.setVelocityY(120); // slower fall
 
-            obj.setAngularVelocity(120); // spin
-
-            // ⏱️ disappear after 2 seconds
+            // 💀 remove after 2 seconds
             this.time.delayedCall(2000, () => {
                 if (obj) obj.destroy();
             });
