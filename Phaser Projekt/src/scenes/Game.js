@@ -1,4 +1,5 @@
 import { Player } from '../gameObjects/Player.js';
+import { Guard } from '../gameObjects/Guard.js';
 
 export class Game extends Phaser.Scene {
     constructor() {
@@ -9,16 +10,16 @@ export class Game extends Phaser.Scene {
         this.gameOver = false;
 
         // 🌍 WORLD
-        this.physics.world.setBounds(0, 0, 2000, 600);
+        this.physics.world.setBounds(0, 0, 3000, 600);
 
-        this.add.tileSprite(0, 0, 2000, 600, 'sky')
+        this.add.tileSprite(0, 0, 3000, 600, 'sky')
             .setOrigin(0, 0)
             .setScrollFactor(0);
 
         // 🧱 PLATFORMS
         this.platforms = this.physics.add.staticGroup();
 
-        for (let x = 0; x < 2000; x += 400) {
+        for (let x = 0; x < 3000; x += 400) {
             this.platforms.create(x, 568, 'ground')
                 .setScale(2)
                 .refreshBody();
@@ -28,65 +29,54 @@ export class Game extends Phaser.Scene {
         this.platforms.create(800, 300, 'ground');
         this.platforms.create(1200, 350, 'ground');
         this.platforms.create(1600, 250, 'ground');
+        this.platforms.create(2000, 350, 'ground');
+        this.platforms.create(2400, 300, 'ground');
 
-        // 👤 PLAYER = TEACHER
+        // 👤 PLAYER
         this.player = new Player(this, 100, 450);
         this.physics.add.collider(this.player, this.platforms);
 
         // 🎥 CAMERA
-        this.cameras.main.setBounds(0, 0, 2000, 600);
+        this.cameras.main.setBounds(0, 0, 3000, 600);
         this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
 
         // 🎮 INPUT
         this.cursors = this.input.keyboard.createCursorKeys();
 
-        // ❤️ LIVES
+        // ❤️ STATS
         this.lives = 3;
-
-        // 📚 HOMEWORK
         this.homework = 0;
-        this.requiredHomework = 10;
 
-        // ⏰ TIME
-        this.timeLeft = 60;
+        // 🔢 PHASE SYSTEM
+        this.phase = 1;
+        this.requiredHomework = 5;
 
         // 🧾 UI
-        this.uiText = this.add.text(16, 16,
-            `Homework: 0/${this.requiredHomework} | Lives: 3 | Time: 60`,
-            { fontSize: '20px', fill: '#000' }
-        ).setScrollFactor(0);
+        this.uiText = this.add.text(16, 16, '', {
+            fontSize: '20px',
+            fill: '#000'
+        }).setScrollFactor(0);
 
-        // ⭐ GOOD STUDENTS
-        this.goodStudents = this.physics.add.group();
-        this.physics.add.collider(this.goodStudents, this.platforms);
-        this.physics.add.overlap(this.player, this.goodStudents, this.collectHomework, null, this);
+        // ⭐ STARS
+        this.stars = this.physics.add.group();
+        this.physics.add.collider(this.stars, this.platforms);
+        this.physics.add.overlap(this.player, this.stars, this.collectStar, null, this);
 
-        // 😈 BAD STUDENTS
-        this.badStudents = this.physics.add.group();
-        this.physics.add.collider(this.badStudents, this.platforms);
-        this.physics.add.collider(this.player, this.badStudents, this.hitBadStudent, null, this);
+        // 😈 ENEMIES
+        this.enemies = this.physics.add.group();
+        this.physics.add.collider(this.enemies, this.platforms);
+        this.physics.add.collider(this.player, this.enemies, this.handleEnemyCollision, null, this);
 
-        // 🏁 HEADMASTER
-        this.goal = this.physics.add.staticImage(1900, 500, 'star');
-        this.physics.add.overlap(this.player, this.goal, this.reachGoal, null, this);
+        // 🧍 GUARD
+this.guard = new Guard(this, 900, 500, 'marilda');
+        this.physics.add.overlap(this.player, this.guard, this.checkGuard, null, this);
 
-        // SPAWN LOOPS
-        this.time.addEvent({ delay: 2000, callback: this.spawnGoodStudent, callbackScope: this, loop: true });
-        this.time.addEvent({ delay: 3000, callback: this.spawnBadStudent, callbackScope: this, loop: true });
+        // 🔄 RESTART
+        this.input.keyboard.on('keydown-SPACE', () => this.scene.restart());
+        this.input.keyboard.on('keydown-ENTER', () => this.scene.restart());
 
-        // ⏰ TIMER LOOP
-        this.time.addEvent({
-            delay: 1000,
-            callback: () => {
-                this.timeLeft--;
-                this.updateUI();
-
-                if (this.timeLeft <= 0) {
-                    this.endGame(false);
-                }
-            },
-            loop: true
-        });
+        this.startPhase1();
+        this.updateUI();
     }
 
     update() {
@@ -94,26 +84,17 @@ export class Game extends Phaser.Scene {
 
         const speed = 200;
 
-        if (this.cursors.left.isDown && !this.cursors.right.isDown) {
-            this.player.setVelocityX(
-                Phaser.Math.Linear(this.player.body.velocity.x, -speed, 0.2)
-            );
+        if (this.cursors.left.isDown) {
+            this.player.setVelocityX(-speed);
             this.player.anims.play('left', true);
         }
-        else if (this.cursors.right.isDown && !this.cursors.left.isDown) {
-            this.player.setVelocityX(
-                Phaser.Math.Linear(this.player.body.velocity.x, speed, 0.2)
-            );
+        else if (this.cursors.right.isDown) {
+            this.player.setVelocityX(speed);
             this.player.anims.play('right', true);
         }
         else {
-            this.player.setVelocityX(
-                Phaser.Math.Linear(this.player.body.velocity.x, 0, 0.2)
-            );
-
-            if (Math.abs(this.player.body.velocity.x) < 5) {
-                this.player.anims.play('turn');
-            }
+            this.player.setVelocityX(0);
+            this.player.anims.play('turn');
         }
 
         if (this.cursors.up.isDown) {
@@ -121,35 +102,41 @@ export class Game extends Phaser.Scene {
         }
     }
 
-    // ⭐ GOOD STUDENT (gives homework)
-    spawnGoodStudent() {
-        const x = Phaser.Math.Between(100, 1900);
-        const student = this.goodStudents.create(x, 0, 'star');
-
-        student.setBounce(0.3);
-        student.setCollideWorldBounds(true);
+    // =========================
+    // ⭐ STARS
+    // =========================
+    spawnStars(positions) {
+        positions.forEach(pos => {
+            const star = this.stars.create(pos.x, pos.y, 'star');
+            star.setBounce(0.3);
+        });
     }
 
-    collectHomework(player, student) {
-        student.destroy();
+    collectStar(player, star) {
+        star.destroy();
         this.homework++;
-
         this.updateUI();
     }
 
-    // 😈 BAD STUDENT (damage)
-    spawnBadStudent() {
-        const x = Phaser.Math.Between(100, 1900);
-        const bad = this.badStudents.create(x, 0, 'bomb');
+    // =========================
+    // 😈 ENEMIES (FIXED)
+    // =========================
+    spawnEnemy(x, y, texture) {
+        const enemy = this.enemies.create(x, y, texture);
 
-        bad.setBounce(1);
-        bad.setVelocity(Phaser.Math.Between(-100, 100), 50);
-        bad.setCollideWorldBounds(true);
+        enemy.setCollideWorldBounds(true);
+        enemy.setBounce(1, 0);
+        enemy.setVelocityX(80); // fixed speed
+
+        return enemy;
     }
 
-    hitBadStudent(player, bad) {
-        bad.destroy();
+    // ❌ NO STOMP LOGIC
+    handleEnemyCollision(player, enemy) {
+        this.damagePlayer();
+    }
 
+    damagePlayer() {
         this.lives--;
 
         this.player.setTint(0xff0000);
@@ -162,32 +149,116 @@ export class Game extends Phaser.Scene {
         }
     }
 
-    // 🧾 UI UPDATE
+    // =========================
+    // 🧍 GUARD / PHASE
+    // =========================
+    checkGuard() {
+    if (this.homework >= this.requiredHomework) {
+        this.nextPhase();
+    } else {
+        this.showMessage("NOT ENOUGH HOMEWORK");
+    }
+    }
+
+    nextPhase() {
+    this.phase++;
+    this.clearLevel();
+
+    if (this.phase === 2) {
+        this.requiredHomework = 10;
+
+        this.guard.setTexture('sidita');   // ✅ PHASE 2 GUARD
+        this.guard.setPosition(1800, 500);
+
+        this.startPhase2();
+        this.showMessage("PART 2");
+    }
+    else if (this.phase === 3) {
+        this.requiredHomework = 20;
+
+        this.guard.setTexture('karl');     // ✅ PHASE 3 GUARD
+        this.guard.setPosition(2700, 500);
+
+        this.startBoss();
+        this.showMessage("BOSS FIGHT");
+    }
+    else {
+        this.endGame(true);
+    }
+
+    this.updateUI();
+}
+
+    clearLevel() {
+        this.stars.clear(true, true);
+        this.enemies.clear(true, true);
+    }
+
+    // =========================
+    // 🧩 PHASES
+    // =========================
+    startPhase1() {
+        this.spawnStars([
+            { x: 300, y: 200 },
+            { x: 600, y: 200 },
+            { x: 900, y: 200 },
+            { x: 1200, y: 200 },
+            { x: 1500, y: 200 }
+        ]);
+
+        const textures = [
+            'ergit','eriseld','gani','eni','ajsi',
+            'gesart','lea','tea','hera','sidrit',
+            'ardita','ermi','erisa','glejdi','nedit'
+        ];
+
+        // ✅ ALL 15 spawn (no random)
+        textures.forEach((texture, i) => {
+            this.spawnEnemy(400 + i * 180, 0, texture);
+        });
+    }
+
+    startPhase2() {
+        this.spawnStars([
+            { x: 1700, y: 200 },
+            { x: 1900, y: 200 },
+            { x: 2100, y: 200 },
+            { x: 2300, y: 200 },
+            { x: 2500, y: 200 }
+        ]);
+    }
+
+    startBoss() {
+        this.showMessage("BOSS FIGHT");
+    }
+
+    // =========================
+    // UI / END
+    // =========================
     updateUI() {
         this.uiText.setText(
-            `Homework: ${this.homework}/${this.requiredHomework} | Lives: ${this.lives} | Time: ${this.timeLeft}`
+            `Stars: ${this.homework}/${this.requiredHomework} | Lives: ${this.lives} | Phase: ${this.phase}`
         );
     }
 
-    // 🏁 FINISH
-    reachGoal() {
-        if (this.homework >= this.requiredHomework) {
-            this.endGame(true);
-        } else {
-            this.endGame(false);
-        }
+    showMessage(text) {
+        const msg = this.add.text(400, 200, text, {
+            fontSize: '32px',
+            fill: '#fff'
+        }).setOrigin(0.5).setScrollFactor(0);
+
+        this.time.delayedCall(1500, () => msg.destroy());
     }
 
-    // 🎬 END GAME
     endGame(win) {
         this.gameOver = true;
         this.physics.pause();
 
-        let text = win
-            ? 'YOU WIN 🎉\nHomework delivered!'
+        const text = win
+            ? 'CONGRATS YOU WIN 🎉'
             : 'YOU LOST ❌';
 
-        this.add.text(400, 300, text, {
+        this.add.text(400, 300, text + "\nPress SPACE to restart", {
             fontSize: '32px',
             fill: '#fff',
             align: 'center'
