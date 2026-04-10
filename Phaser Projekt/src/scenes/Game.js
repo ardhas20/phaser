@@ -66,6 +66,13 @@ export class Game extends Phaser.Scene {
         this.enemies = this.physics.add.group();
         this.physics.add.collider(this.enemies, this.platforms);
         this.physics.add.collider(this.player, this.enemies, this.handleEnemyCollision, null, this);
+        this.fallingHazards = this.physics.add.group();
+        this.physics.add.collider(this.fallingHazards, this.platforms);
+
+this.physics.add.overlap(this.player, this.fallingHazards, (player, hazard) => {
+    hazard.destroy();
+    this.damagePlayer();
+});
 
         // 🧍 GUARD
 this.guard = new Guard(this, 900, 500, 'marilda');
@@ -77,6 +84,23 @@ this.guard = new Guard(this, 900, 500, 'marilda');
 
         this.startPhase1();
         this.updateUI();
+
+        // 💣 BOMB SYSTEM
+this.bombs = this.physics.add.group();
+
+this.lastBombTime = 0;
+this.bombCooldown = 500; // 0.5 sec
+
+this.bKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.J);
+
+// collision: bombs vs enemies (students)
+this.physics.add.overlap(this.bombs, this.enemies, (bomb, enemy) => {
+    enemy.setVelocityY(300);
+    enemy.setAlpha(0);
+    enemy.destroy();
+
+    bomb.destroy();
+});
     }
 
     update() {
@@ -100,6 +124,16 @@ this.guard = new Guard(this, 900, 500, 'marilda');
         if (this.cursors.up.isDown) {
             this.player.jump();
         }
+
+        // 💣 SHOOT BOMB
+if (Phaser.Input.Keyboard.JustDown(this.bKey)) {
+    const now = this.time.now;
+
+    if (now - this.lastBombTime > this.bombCooldown) {
+        this.shootBomb();
+        this.lastBombTime = now;
+    }
+}
     }
 
     // =========================
@@ -158,6 +192,7 @@ this.guard = new Guard(this, 900, 500, 'marilda');
     } else {
         this.showMessage("NOT ENOUGH HOMEWORK");
     }
+
     }
 
     nextPhase() {
@@ -168,7 +203,7 @@ this.guard = new Guard(this, 900, 500, 'marilda');
         this.requiredHomework = 10;
 
         this.guard.setTexture('sidita');   // ✅ PHASE 2 GUARD
-        this.guard.setPosition(1800, 500);
+        this.guard.setPosition(1850, 500);
 
         this.startPhase2();
         this.showMessage("PART 2");
@@ -219,14 +254,18 @@ this.guard = new Guard(this, 900, 500, 'marilda');
     }
 
     startPhase2() {
-        this.spawnStars([
-            { x: 1700, y: 200 },
-            { x: 1900, y: 200 },
-            { x: 2100, y: 200 },
-            { x: 2300, y: 200 },
-            { x: 2500, y: 200 }
-        ]);
-    }
+    // 📍 spread out near Sidita area
+    this.spawnStars([
+        { x: 1600, y: 200 },
+        { x: 1750, y: 220 },
+        { x: 1900, y: 200 },
+        { x: 2050, y: 220 },
+        { x: 2200, y: 200 }
+    ]);
+
+    this.spawnFallingHazards();
+}
+
 
     startBoss() {
         this.showMessage("BOSS FIGHT");
@@ -264,4 +303,47 @@ this.guard = new Guard(this, 900, 500, 'marilda');
             align: 'center'
         }).setOrigin(0.5).setScrollFactor(0);
     }
+
+    shootBomb() {
+    const bomb = this.bombs.create(this.player.x, this.player.y, 'bomb');
+
+    bomb.setScale(0.5);
+
+    bomb.setVelocityX(this.player.flipX ? -300 : 300);
+    bomb.setVelocityY(-150);
+
+    bomb.setBounce(0.3);
+    bomb.setCollideWorldBounds(true);
+
+    this.time.delayedCall(500, () => {
+        if (bomb) bomb.destroy();
+    });
+}
+spawnFallingHazards() {
+    const textures = ['laptop', 'pultteiler', 'bag'];
+
+    this.time.addEvent({
+        delay: 1200, // ⬅️ slower spawn (not too many)
+        loop: true,
+        callback: () => {
+            // 📍 SIDITA AREA ONLY
+            const x = Phaser.Math.Between(1700, 2000);
+
+            const texture = Phaser.Utils.Array.GetRandom(textures);
+
+            const obj = this.fallingHazards.create(x, 0, texture);
+
+            obj.setScale(1); // bigger
+
+            obj.setVelocityY(80); // slower fall
+
+            obj.setAngularVelocity(120); // spin
+
+            // ⏱️ disappear after 2 seconds
+            this.time.delayedCall(2000, () => {
+                if (obj) obj.destroy();
+            });
+        }
+    });
+}
 }
