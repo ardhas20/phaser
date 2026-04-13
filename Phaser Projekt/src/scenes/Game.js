@@ -33,6 +33,15 @@ export class Game extends Phaser.Scene {
         this.platforms.create(2000, 350, 'ground');
         this.platforms.create(2400, 300, 'ground');
 
+        // 🎨 GLOBAL TEXT STYLE (ADD THIS ONCE)
+this.textStyle = {
+    fontSize: '32px',
+    fill: '#ffffff',
+    stroke: '#000000',
+    strokeThickness: 6,
+    align: 'center'
+};
+
         // 👤 PLAYER
         this.player = new Player(this, 100, 450);
         this.physics.add.collider(this.player, this.platforms);
@@ -54,14 +63,16 @@ export class Game extends Phaser.Scene {
 
         // 🧾 UI
         this.uiText = this.add.text(16, 16, '', {
-            fontSize: '20px',
-            fill: '#000'
-        }).setScrollFactor(0);
+    fontSize: '20px',
+    fill: '#ffffff',
+    stroke: '#000000',
+    strokeThickness: 4
+}).setScrollFactor(0);
 
-        // ⭐ STARS
-        this.stars = this.physics.add.group();
-        this.physics.add.collider(this.stars, this.platforms);
-        this.physics.add.overlap(this.player, this.stars, this.collectStar, null, this);
+        // ⭐ homeworks
+        this.homeworks = this.physics.add.group();
+        this.physics.add.collider(this.homeworks, this.platforms);
+        this.physics.add.overlap(this.player, this.homeworks, this.collectHomework, null, this);
 
         // 😈 ENEMIES
         this.enemies = this.physics.add.group();
@@ -86,32 +97,15 @@ this.guard = new Guard(this, 900, 500, 'marilda');
         this.startPhase1();
         this.updateUI();
 // 🧑 KARL (WIN TRIGGER)
-this.karl = this.physics.add.sprite(2700, 500, 'karl');
-this.karl.setImmovable(true);
-this.karl.setVisible(false); // hidden until final phase
+this.karl = new Guard(this, 2700, 450, 'karl');
+this.karl.setVisible(false);
+this.karl.body.enable = false;
 
 this.physics.add.overlap(this.player, this.karl, () => {
-    if (this.phase === 2) return; // only allow win AFTER phase 2 is done
-
-    this.showMessage("Karl: Congratulations Paul, you gathered all the homework. I'm giving you a raise!");
+    this.showMessage("Congratulations Paul.\nYou gathered all the homework!");
     this.endGame(true);
 });
-        // 💣 BOMB SYSTEM
-this.bombs = this.physics.add.group();
 
-this.lastBombTime = 0;
-this.bombCooldown = 500; // 0.5 sec
-
-this.bKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.J);
-
-// collision: bombs vs enemies (students)
-this.physics.add.overlap(this.bombs, this.enemies, (bomb, enemy) => {
-    enemy.setVelocityY(300);
-    enemy.setAlpha(0);
-    enemy.destroy();
-
-    bomb.destroy();
-});
     }
 
     update() {
@@ -136,29 +130,20 @@ this.physics.add.overlap(this.bombs, this.enemies, (bomb, enemy) => {
             this.player.jump();
         }
 
-        // 💣 SHOOT BOMB
-if (Phaser.Input.Keyboard.JustDown(this.bKey)) {
-    const now = this.time.now;
-
-    if (now - this.lastBombTime > this.bombCooldown) {
-        this.shootBomb();
-        this.lastBombTime = now;
-    }
-}
     }
 
     // =========================
-    // ⭐ STARS
+    // ⭐ homeworks
     // =========================
-    spawnStars(positions) {
+    spawnHomework(positions) {
         positions.forEach(pos => {
-            const star = this.stars.create(pos.x, pos.y, 'star');
-            star.setBounce(0.3);
+            const homework = this.homeworks.create(pos.x, pos.y, 'homework');
+            homework.setBounce(0.3);
         });
     }
 
-    collectStar(player, star) {
-        star.destroy();
+    collectHomework(player, homework) {
+        homework.destroy();
         this.homework++;
         this.updateUI();
     }
@@ -197,41 +182,58 @@ if (Phaser.Input.Keyboard.JustDown(this.bKey)) {
     // =========================
     // 🧍 GUARD / PHASE
     // =========================
-    checkGuard() {
-    if (this.homework >= this.requiredHomework) {
-        this.nextPhase();
-    } else {
-        this.showMessage("NOT ENOUGH HOMEWORK");
+checkGuard() {
+    // Phase 1 → go to Phase 2
+    if (this.phase === 1) {
+        if (this.homework >= this.requiredHomework) {
+            this.nextPhase();
+        } else {
+            this.showMessage("NOT ENOUGH HOMEWORK");
+        }
+    }
+
+    // Phase 2 → go to Phase 3 (THIS IS THE IMPORTANT PART)
+    else if (this.phase === 2) {
+        if (this.homework >= this.requiredHomework) {
+            this.nextPhase();
+        } else {
+            this.showMessage("COLLECT ALL HOMEWORK");
+        }
     }
 }
 
-    nextPhase() {
+nextPhase() {
     this.phase++;
     this.clearLevel();
 
+    // PHASE 2
     if (this.phase === 2) {
-        this.requiredHomework = 10;
+        this.requiredHomework = 5;
+        this.homework = 0;
 
         this.guard.setTexture('sidita');
         this.guard.setPosition(1850, 500);
 
         this.startPhase2();
-
-        // ❗ start hazards ONLY here
         this.spawnFallingHazards();
 
         this.showMessage("PART 2");
     }
-    else if (this.phase === 3) {
-        // 🏁 FINAL STATE → enable Karl
-        this.karl.setVisible(true);
-        this.karl.setPosition(2700, 500);
 
-        // stop hazards completely
+    // PHASE 3 (KARL)
+    else if (this.phase === 3) {
+        this.guard.setVisible(false);
+        this.guard.body.enable = false;
+
         if (this.hazardTimer) {
             this.hazardTimer.remove();
             this.hazardTimer = null;
         }
+
+        // ✅ SHOW KARL LIKE A NORMAL GUARD
+        this.karl.setVisible(true);
+        this.karl.body.enable = true;
+        this.karl.setPosition(2700, 500);
 
         this.showMessage("Go talk to Karl");
     }
@@ -240,7 +242,7 @@ if (Phaser.Input.Keyboard.JustDown(this.bKey)) {
 }
 
     clearLevel() {
-        this.stars.clear(true, true);
+        this.homeworks.clear(true, true);
         this.enemies.clear(true, true);
     }
 
@@ -248,7 +250,7 @@ if (Phaser.Input.Keyboard.JustDown(this.bKey)) {
     // 🧩 PHASES
     // =========================
     startPhase1() {
-        this.spawnStars([
+        this.spawnHomework([
             { x: 300, y: 200 },
             { x: 600, y: 200 },
             { x: 900, y: 200 },
@@ -270,7 +272,7 @@ if (Phaser.Input.Keyboard.JustDown(this.bKey)) {
 
     startPhase2() {
     // 📍 spread out near Sidita area
-    this.spawnStars([
+    this.spawnHomework([
         { x: 1600, y: 200 },
         { x: 1750, y: 220 },
         { x: 1900, y: 200 },
@@ -278,7 +280,6 @@ if (Phaser.Input.Keyboard.JustDown(this.bKey)) {
         { x: 2200, y: 200 }
     ]);
 
-    this.spawnFallingHazards();
 }
 
 
@@ -287,47 +288,33 @@ if (Phaser.Input.Keyboard.JustDown(this.bKey)) {
     // =========================
     updateUI() {
         this.uiText.setText(
-            `Stars: ${this.homework}/${this.requiredHomework} | Lives: ${this.lives} | Phase: ${this.phase}`
+            `Homework: ${this.homework}/${this.requiredHomework} | Lives: ${this.lives} | Phase: ${this.phase}`
         );
     }
-
     showMessage(text) {
-        const msg = this.add.text(400, 200, text, {
-            fontSize: '32px',
-            fill: '#fff'
-        }).setOrigin(0.5).setScrollFactor(0);
+    const msg = this.add.text(400, 200, text, this.textStyle)
+        .setOrigin(0.5)
+        .setScrollFactor(0);
 
-        this.time.delayedCall(1500, () => msg.destroy());
-    }
+    this.time.delayedCall(1500, () => msg.destroy());
+}
 
-    endGame(win) {
-        this.gameOver = true;
-        this.physics.pause();
+endGame(win) {
+    this.gameOver = true;
 
-        const text = win
-            ? 'CONGRATS YOU WIN 🎉'
-            : 'YOU LOST ❌';
+    // stop player input physics
+    this.physics.pause();
 
-        this.add.text(400, 300, text + "\nPress SPACE to restart", {
-            fontSize: '32px',
-            fill: '#fff',
-            align: 'center'
-        }).setOrigin(0.5).setScrollFactor(0);
-    }
+    const text = win
+        ? 'CONGRATS YOU WIN 🎉'
+        : 'YOU LOST ❌';
 
-    shootBomb() {
-    const bomb = this.bombs.create(this.player.x, this.player.y, 'bomb');
-
-    bomb.setScale(0.5);
-
-    bomb.setVelocityX(this.player.flipX ? -300 : 300);
-    bomb.setVelocityY(-150);
-
-    bomb.setBounce(0.3);
-    bomb.setCollideWorldBounds(true);
-
-    this.time.delayedCall(500, () => {
-        if (bomb) bomb.destroy();
+    // IMPORTANT: create text AFTER pause safely
+    this.time.delayedCall(10, () => {
+        this.add.text(400, 300, text + "\nPress SPACE to restart", this.textStyle)
+            .setOrigin(0.5)
+            .setScrollFactor(0)
+            .setDepth(999);
     });
 }
 spawnFallingHazards() {
@@ -338,14 +325,12 @@ spawnFallingHazards() {
         loop: true,
         callback: () => {
 
-            // ❌ only run in phase 2
+            // only run in phase 2
             if (this.phase !== 2) return;
 
-            // 📍 ONLY SIDITA AREA
+            // ONLY SIDITA AREA
             const x = Phaser.Math.Between(1750, 1950);
-
             const texture = Phaser.Utils.Array.GetRandom(textures);
-
             const obj = this.fallingHazards.create(x, 0, texture);
 
             obj.setScale(1.2); // bigger

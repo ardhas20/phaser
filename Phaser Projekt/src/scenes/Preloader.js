@@ -19,7 +19,7 @@ export class Preloader extends Phaser.Scene {
         // 🌍 BASIC
         this.load.image('sky', 'assets/sky.png');
         this.load.image('ground', 'assets/platform.png');
-        this.load.image('star', 'assets/star.png');
+        this.load.image('homework', 'assets/homework.png');
         this.load.image('bomb', 'assets/bomb.png');
         this.load.image('laptop', 'assets/laptop.png');
 this.load.image('pultteiler', 'assets/pultteiler.png');
